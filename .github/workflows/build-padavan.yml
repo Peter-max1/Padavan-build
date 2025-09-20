@@ -7,10 +7,6 @@ on:
   push:
     tags:
     - 'v*'
-  #  branches: 
-  #    - master
-  # schedule:
-  #   - cron: 0 8 * * 5
   watch:
     types: [started]
 
@@ -21,7 +17,7 @@ jobs:
 
     steps:
     - name: Checkout
-      uses: actions/checkout@v4  # 使用最新版本
+      uses: actions/checkout@v4  # 使用最新版checkout组件
 
     - name: Initialization environment
       env:
@@ -31,7 +27,7 @@ jobs:
         sudo apt-get -y install unzip libtool-bin curl cmake gperf gawk flex bison nano xxd fakeroot \
         cpio git python3-docutils gettext automake autopoint texinfo build-essential help2man \
         pkg-config zlib1g-dev libgmp3-dev libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget
-        # 清理缓存以节省空间
+        # 清理缓存释放空间
         sudo apt-get clean
         sudo rm -rf /var/lib/apt/lists/*
 
@@ -45,7 +41,7 @@ jobs:
         else
           git clone --depth=1 https://github.com/Peter-max1/rt-n56u.git /opt/rt-n56u
         fi
-        # 增加超时和重试机制
+        # 工具链下载带重试机制
         cd /opt/rt-n56u/toolchain-mipsel || exit 1
         for i in {1..3}; do
           sh dl_toolchain.sh && break || sleep 5
@@ -65,15 +61,11 @@ jobs:
           exit 1
         fi
         
-        # 复制配置文件
+        # 复制并配置固件选项
         cp -f "configs/templates/$TNAME.config" .config
-        
-        # 配置固件选项
         sed -i 's/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=n/CONFIG_FIRMWARE_INCLUDE_OPENSSL_EXE=y/g' .config
         
-        ################################################################################################
         # 移除不需要的配置项
-        ################################################################################################
         sed -i '/CONFIG_FIRMWARE_INCLUDE_MENTOHUST/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SHADOWSOCKS/d' .config
@@ -87,9 +79,7 @@ jobs:
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SMARTDNS/d' .config
         sed -i '/CONFIG_FIRMWARE_INCLUDE_SRELAY/d' .config
         
-        ######################################################################
-        # 定义需要的功能（y=集成,n=忽略）
-        ######################################################################
+        # 配置需要的功能
         if [ "$KERNEL" = "4.4" ]; then
           echo "CONFIG_FIRMWARE_INCLUDE_MENTOHUST=n" >> .config
           echo "CONFIG_FIRMWARE_INCLUDE_SCUTCLIENT=n" >> .config
@@ -130,17 +120,15 @@ jobs:
           echo "CONFIG_FIRMWARE_INCLUDE_ZEROTIER=n" >> .config
         fi
         
-        #########################################################################################
-        # 开始构建
-        #########################################################################################
+        # 开始构建固件
         sudo ./clear_tree
-        # 增加构建超时控制和输出详细日志
+        # 设置构建超时（1小时）
         sudo timeout 3600 ./build_firmware_modify "$TNAME" 0 || {
           echo "Build timed out or failed"
           exit 1
         }
         
-        # 检查是否生成了固件文件
+        # 检查固件是否生成
         if [ -z "$(ls -A images/*.trx 2>/dev/null)" ]; then
           echo "Error: No firmware files generated"
           exit 1
@@ -149,9 +137,12 @@ jobs:
         sudo mv -f images/*.trx /opt/images/
 
     - name: Upload packages
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # 已升级至v4版本
       if: always()
       with:
         name: Padavan-packages
         path: /opt/images/
-        if-no-files-found: warn  # 找不到文件时警告而不是失败
+        if-no-files-found: warn  # 无文件时仅警告
+        retention-days: 7  #  artifacts保留7天（可按需调整）
+        compression-level: 6  # 平衡压缩速度和体积
+    
